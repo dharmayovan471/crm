@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+dist/
+.expo/
+
+# Environment files (never commit secrets)
+.env
+*.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads (user-generated content)
+apps/tenant-service/uploads/*
+!apps/tenant-service/uploads/.gitkeep
+
+# Coverage
+coverage/

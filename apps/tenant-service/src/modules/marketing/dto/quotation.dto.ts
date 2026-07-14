@@ -1,0 +1,60 @@
+import { z } from 'zod';
+import { ApiProperty } from '@nestjs/swagger';
+
+export const QuotationItemSchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.number().int().positive(),
+  rate: z.number().positive(),
+});
+
+export const QuotationCreateSchema = z.object({
+  quotationNo: z.string().min(2),
+  leadId: z.string().uuid().optional().nullable(),
+  customerId: z.string().uuid().optional().nullable(),
+  quoteDate: z.string().datetime().optional(),
+  validUntil: z.string().datetime().optional().nullable(),
+  discount: z.number().nonnegative().optional(),
+  taxAmount: z.number().nonnegative().optional(),
+  status: z.enum(['DRAFT', 'SENT', 'APPROVED', 'REJECTED']).default('DRAFT'),
+  items: z.array(QuotationItemSchema).min(1),
+});
+
+export class QuotationItemDto {
+  @ApiProperty({ example: 'd290f1d6-2e4b-4b2a-89a1-77884a29a001' })
+  productId!: string;
+
+  @ApiProperty({ example: 50 })
+  quantity!: number;
+
+  @ApiProperty({ example: 95.00 })
+  rate!: number;
+}
+
+export class QuotationCreateDto {
+  @ApiProperty({ example: 'QT-2026-0001' })
+  quotationNo!: string;
+
+  @ApiProperty({ example: 'd290f1d6-2e4b-4b2a-89a1-77884a29a002', required: false })
+  leadId?: string;
+
+  @ApiProperty({ example: 'd290f1d6-2e4b-4b2a-89a1-77884a29a003', required: false })
+  customerId?: string;
+
+  @ApiProperty({ example: '2026-07-11T12:00:00Z', required: false })
+  quoteDate?: string;
+
+  @ApiProperty({ example: '2026-08-11T12:00:00Z', required: false })
+  validUntil?: string;
+
+  @ApiProperty({ example: 100.00, required: false, default: 0.00 })
+  discount?: number;
+
+  @ApiProperty({ example: 180.00, required: false, default: 0.00 })
+  taxAmount?: number;
+
+  @ApiProperty({ example: 'DRAFT', enum: ['DRAFT', 'SENT', 'APPROVED', 'REJECTED'] })
+  status!: string;
+
+  @ApiProperty({ type: [QuotationItemDto] })
+  items!: QuotationItemDto[];
+}

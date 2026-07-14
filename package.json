@@ -1,0 +1,15 @@
+{
+  "name": "crm-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/backend",
+    "apps/frontend",
+    "libs/shared-types"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace=libs/shared-types",
+    "build:backend": "npm run build --workspace=apps/backend",
+    "build:all": "npm run build:shared && npm run build:backend"
+  }
+}
