@@ -49,11 +49,25 @@ export class LeadRepository {
         .where(eq(productPrices.productId, p.productId));
         
       const matchingSlab = prices.find(
-        (sp) => p.quantity >= sp.minimumQty && p.quantity <= sp.maximumQty
+        (sp) => p.quantity >= sp.minCount && p.quantity <= sp.maxCount
       );
       
-      const unitPrice = matchingSlab ? parseFloat(matchingSlab.unitPrice) : (p.unitPrice || 0);
-      const amount = p.quantity * unitPrice;
+      let amount = 0;
+      let unitPrice = 0;
+      
+      if (matchingSlab) {
+        if (matchingSlab.pricingType === 'FIXED') {
+          amount = parseFloat(matchingSlab.fixedAmount || '0');
+          unitPrice = amount; // Map FIXED amount directly
+        } else {
+          unitPrice = parseFloat(matchingSlab.unitPrice || '0');
+          amount = p.quantity * unitPrice;
+        }
+      } else {
+        unitPrice = p.unitPrice || 0;
+        amount = p.quantity * unitPrice;
+      }
+      
       expectedValue += amount;
       
       resolvedProducts.push({

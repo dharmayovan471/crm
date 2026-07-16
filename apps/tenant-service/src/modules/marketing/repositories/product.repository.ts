@@ -29,15 +29,29 @@ export class ProductRepository {
   async createProductPrice(productId: string, priceData: any) {
     const db = TenantContext.getDb();
     await this.findProductById(productId);
+
+    // Verify no overlaps
+    const existingPrices = await this.findPricesOfProduct(productId);
+    const hasOverlap = existingPrices.some(
+      (p) => priceData.minCount <= p.maxCount && priceData.maxCount >= p.minCount
+    );
+    if (hasOverlap) {
+      throw new Error(`Pricing ranges for the same product must not overlap.`);
+    }
+
     const result = await db
       .insert(productPrices)
       .values({
         productId,
-        minimumQty: priceData.minimumQty,
-        maximumQty: priceData.maximumQty,
-        unitPrice: priceData.unitPrice.toString(),
+        pricingType: priceData.pricingType,
+        minCount: priceData.minCount,
+        maxCount: priceData.maxCount,
+        unitPrice: priceData.unitPrice ? priceData.unitPrice.toString() : null,
+        fixedAmount: priceData.fixedAmount ? priceData.fixedAmount.toString() : null,
+        currency: priceData.currency || 'INR',
         effectiveFrom: new Date(priceData.effectiveFrom),
         effectiveTo: new Date(priceData.effectiveTo),
+        status: priceData.status || 'ACTIVE',
       })
       .returning();
     return result[0];
@@ -60,11 +74,15 @@ export class ProductRepository {
       .where(eq(productPrices.productId, productId));
     
     const matchingSlab = prices.find(
-      (p) => qty >= p.minimumQty && qty <= p.maximumQty
+      (p) => qty >= p.minCount && qty <= p.maxCount
     );
     
     if (matchingSlab) {
-      return parseFloat(matchingSlab.unitPrice);
+      if (matchingSlab.pricingType === 'FIXED') {
+        return parseFloat(matchingSlab.fixedAmount || '0');
+      } else {
+        return qty * parseFloat(matchingSlab.unitPrice || '0');
+      }
     }
     return 0;
   }

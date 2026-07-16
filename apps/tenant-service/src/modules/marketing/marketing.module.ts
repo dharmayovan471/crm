@@ -8,6 +8,7 @@ import { DashboardController } from './controllers/dashboard.controller';
 import { ZoneController } from './controllers/zone.controller';
 import { MasterController } from './controllers/master.controller';
 import { QuotationController } from './controllers/quotation.controller';
+import { ProductPricingController } from './controllers/product-pricing.controller';
 
 import { LeadService } from './services/lead.service';
 import { CustomerService } from './services/customer.service';
@@ -37,6 +38,7 @@ import { S3Module } from '../s3/s3.module';
     ZoneController,
     MasterController,
     QuotationController,
+    ProductPricingController,
   ],
   providers: [
     LeadService,

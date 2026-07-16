@@ -229,12 +229,19 @@ export const customers = pgTable('customers', {
 export const productPrices = pgTable('product_prices', {
   id: uuid('id').primaryKey().defaultRandom(),
   productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
-  minimumQty: integer('minimum_qty').notNull(),
-  maximumQty: integer('maximum_qty').notNull(),
-  unitPrice: decimal('unit_price', { precision: 12, scale: 2 }).notNull(),
+  pricingType: varchar('pricing_type', { length: 50 }).default('UNIT').notNull(), // FIXED | UNIT
+  minCount: integer('min_count').notNull(),
+  maxCount: integer('max_count').notNull(),
+  unitPrice: decimal('unit_price', { precision: 12, scale: 2 }), // Null if FIXED
+  fixedAmount: decimal('fixed_amount', { precision: 12, scale: 2 }), // Null if UNIT
+  currency: varchar('currency', { length: 10 }).default('INR').notNull(),
   effectiveFrom: timestamp('effective_from').notNull(),
   effectiveTo: timestamp('effective_to').notNull(),
+  status: varchar('status', { length: 50 }).default('ACTIVE').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdBy: uuid('created_by'),
+  updatedBy: uuid('updated_by'),
 });
 
 export const quotations = pgTable('quotations', {

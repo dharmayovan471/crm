@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import { TenantContext } from '../../common/context/tenant.context';
-import { quotations, quotationItems, quotationRevisions, quotationHistory } from '../../database/schemas/tenant.schema';
+import { quotations, quotationItems, quotationRevisions, quotationHistory, productPrices } from '../../database/schemas/tenant.schema';
 import { QuotationCreateDto } from '../dto/quotation.dto';
 
 @Injectable()
@@ -33,18 +33,37 @@ export class QuotationService {
   async create(dto: QuotationCreateDto) {
     const db = TenantContext.getDb();
 
-    // 1. Calculate subtotals
+    // 1. Calculate subtotals based on pricing slabs
     let subtotal = 0;
-    const itemsData = dto.items.map((item) => {
-      const amount = item.rate * item.quantity;
+    const itemsData = [];
+    for (const item of dto.items) {
+      const prices = await db
+        .select()
+        .from(productPrices)
+        .where(eq(productPrices.productId, item.productId));
+      const slab = prices.find((sp) => item.quantity >= sp.minCount && item.quantity <= sp.maxCount);
+      
+      let amount = 0;
+      let rate = item.rate;
+      if (slab) {
+        if (slab.pricingType === 'FIXED') {
+          amount = parseFloat(slab.fixedAmount || '0');
+          rate = amount; 
+        } else {
+          rate = parseFloat(slab.unitPrice || '0');
+          amount = item.quantity * rate;
+        }
+      } else {
+        amount = item.quantity * rate;
+      }
       subtotal += amount;
-      return {
+      itemsData.push({
         productId: item.productId,
         quantity: item.quantity,
-        rate: item.rate,
+        rate,
         amount,
-      };
-    });
+      });
+    }
 
     const discount = dto.discount || 0;
     const taxAmount = dto.taxAmount || 0;
@@ -131,18 +150,37 @@ export class QuotationService {
     const db = TenantContext.getDb();
     const currentQuote = await this.findOne(id);
 
-    // Calculate subtotals
+    // Calculate subtotals based on pricing slabs
     let subtotal = 0;
-    const itemsData = dto.items.map((item) => {
-      const amount = item.rate * item.quantity;
+    const itemsData = [];
+    for (const item of dto.items) {
+      const prices = await db
+        .select()
+        .from(productPrices)
+        .where(eq(productPrices.productId, item.productId));
+      const slab = prices.find((sp) => item.quantity >= sp.minCount && item.quantity <= sp.maxCount);
+      
+      let amount = 0;
+      let rate = item.rate;
+      if (slab) {
+        if (slab.pricingType === 'FIXED') {
+          amount = parseFloat(slab.fixedAmount || '0');
+          rate = amount; 
+        } else {
+          rate = parseFloat(slab.unitPrice || '0');
+          amount = item.quantity * rate;
+        }
+      } else {
+        amount = item.quantity * rate;
+      }
       subtotal += amount;
-      return {
+      itemsData.push({
         productId: item.productId,
         quantity: item.quantity,
-        rate: item.rate,
+        rate,
         amount,
-      };
-    });
+      });
+    }
 
     const discount = dto.discount || 0;
     const taxAmount = dto.taxAmount || 0;

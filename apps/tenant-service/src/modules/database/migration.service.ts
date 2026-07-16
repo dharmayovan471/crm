@@ -378,13 +378,59 @@ export class MigrationService implements OnModuleInit {
           CREATE TABLE IF NOT EXISTS "${schemaName}"."product_prices" (
             "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             "product_id" uuid REFERENCES "${schemaName}"."products"("id") ON DELETE CASCADE NOT NULL,
-            "minimum_qty" integer NOT NULL,
-            "maximum_qty" integer NOT NULL,
-            "unit_price" decimal(12,2) NOT NULL,
+            "pricing_type" varchar(50) DEFAULT 'UNIT' NOT NULL,
+            "min_count" integer NOT NULL,
+            "max_count" integer NOT NULL,
+            "unit_price" decimal(12,2),
+            "fixed_amount" decimal(12,2),
+            "currency" varchar(10) DEFAULT 'INR' NOT NULL,
             "effective_from" timestamp NOT NULL,
             "effective_to" timestamp NOT NULL,
-            "created_at" timestamp DEFAULT now() NOT NULL
+            "status" varchar(50) DEFAULT 'ACTIVE' NOT NULL,
+            "created_at" timestamp DEFAULT now() NOT NULL,
+            "updated_at" timestamp DEFAULT now() NOT NULL,
+            "created_by" uuid,
+            "updated_by" uuid
           );
+        `));
+
+        // Schema migration updates for existing product_prices tables
+        await this.publicDb.execute(sql.raw(`
+          ALTER TABLE "${schemaName}"."product_prices"
+          ADD COLUMN IF NOT EXISTS "pricing_type" varchar(50) DEFAULT 'UNIT' NOT NULL,
+          ADD COLUMN IF NOT EXISTS "min_count" integer,
+          ADD COLUMN IF NOT EXISTS "max_count" integer,
+          ADD COLUMN IF NOT EXISTS "fixed_amount" decimal(12,2),
+          ADD COLUMN IF NOT EXISTS "currency" varchar(10) DEFAULT 'INR' NOT NULL,
+          ADD COLUMN IF NOT EXISTS "status" varchar(50) DEFAULT 'ACTIVE' NOT NULL,
+          ADD COLUMN IF NOT EXISTS "updated_at" timestamp DEFAULT now() NOT NULL,
+          ADD COLUMN IF NOT EXISTS "created_by" uuid,
+          ADD COLUMN IF NOT EXISTS "updated_by" uuid;
+        `));
+
+        // Copy legacy minimum_qty and maximum_qty if existing and not null
+        await this.publicDb.execute(sql.raw(`
+          UPDATE "${schemaName}"."product_prices"
+          SET "min_count" = "minimum_qty"
+          WHERE "min_count" IS NULL AND "minimum_qty" IS NOT NULL;
+        `));
+        await this.publicDb.execute(sql.raw(`
+          UPDATE "${schemaName}"."product_prices"
+          SET "max_count" = "maximum_qty"
+          WHERE "max_count" IS NULL AND "maximum_qty" IS NOT NULL;
+        `));
+
+        // Ensure NOT NULL constraints for min_count and max_count
+        await this.publicDb.execute(sql.raw(`
+          ALTER TABLE "${schemaName}"."product_prices"
+          ALTER COLUMN "min_count" SET NOT NULL,
+          ALTER COLUMN "max_count" SET NOT NULL;
+        `));
+
+        // Drop NOT NULL from unit_price since it's nullable for FIXED pricing
+        await this.publicDb.execute(sql.raw(`
+          ALTER TABLE "${schemaName}"."product_prices"
+          ALTER COLUMN "unit_price" DROP NOT NULL;
         `));
 
         await this.publicDb.execute(sql.raw(`
@@ -656,8 +702,8 @@ export class MigrationService implements OnModuleInit {
               ];
               for (const slab of slabs) {
                 await this.publicDb.execute(sql.raw(`
-                  INSERT INTO "${schemaName}"."product_prices" (product_id, minimum_qty, maximum_qty, unit_price, effective_from, effective_to)
-                  VALUES ('${productId}', ${slab.min}, ${slab.max}, ${slab.price}, '${now}', '${future}');
+                  INSERT INTO "${schemaName}"."product_prices" (product_id, pricing_type, min_count, max_count, fixed_amount, unit_price, effective_from, effective_to)
+                  VALUES ('${productId}', 'FIXED', ${slab.min}, ${slab.max}, ${slab.price}, NULL, '${now}', '${future}');
                 `));
               }
             } else if (p.code === 'college-erp') {
@@ -668,14 +714,38 @@ export class MigrationService implements OnModuleInit {
               ];
               for (const slab of slabs) {
                 await this.publicDb.execute(sql.raw(`
-                  INSERT INTO "${schemaName}"."product_prices" (product_id, minimum_qty, maximum_qty, unit_price, effective_from, effective_to)
-                  VALUES ('${productId}', ${slab.min}, ${slab.max}, ${slab.price}, '${now}', '${future}');
+                  INSERT INTO "${schemaName}"."product_prices" (product_id, pricing_type, min_count, max_count, fixed_amount, unit_price, effective_from, effective_to)
+                  VALUES ('${productId}', 'FIXED', ${slab.min}, ${slab.max}, ${slab.price}, NULL, '${now}', '${future}');
+                `));
+              }
+            } else if (p.code === 'crm') {
+              const slabs = [
+                { min: 1, max: 1000, price: 20 },
+                { min: 1001, max: 2000, price: 18 },
+                { min: 2001, max: 4000, price: 15 }
+              ];
+              for (const slab of slabs) {
+                await this.publicDb.execute(sql.raw(`
+                  INSERT INTO "${schemaName}"."product_prices" (product_id, pricing_type, min_count, max_count, unit_price, fixed_amount, effective_from, effective_to)
+                  VALUES ('${productId}', 'UNIT', ${slab.min}, ${slab.max}, ${slab.price}, NULL, '${now}', '${future}');
+                `));
+              }
+            } else if (p.code === 'hrms') {
+              const slabs = [
+                { min: 1, max: 1000, price: 25 },
+                { min: 1001, max: 2000, price: 22 },
+                { min: 2001, max: 4000, price: 20 }
+              ];
+              for (const slab of slabs) {
+                await this.publicDb.execute(sql.raw(`
+                  INSERT INTO "${schemaName}"."product_prices" (product_id, pricing_type, min_count, max_count, unit_price, fixed_amount, effective_from, effective_to)
+                  VALUES ('${productId}', 'UNIT', ${slab.min}, ${slab.max}, ${slab.price}, NULL, '${now}', '${future}');
                 `));
               }
             } else {
               await this.publicDb.execute(sql.raw(`
-                INSERT INTO "${schemaName}"."product_prices" (product_id, minimum_qty, maximum_qty, unit_price, effective_from, effective_to)
-                VALUES ('${productId}', 1, 999999, 15000, '${now}', '${future}');
+                INSERT INTO "${schemaName}"."product_prices" (product_id, pricing_type, min_count, max_count, fixed_amount, unit_price, effective_from, effective_to)
+                VALUES ('${productId}', 'FIXED', 1, 999999, 15000, NULL, '${now}', '${future}');
               `));
             }
           }

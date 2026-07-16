@@ -11,11 +11,23 @@ export const ProductCreateSchema = z.object({
 });
 
 export const PriceCreateSchema = z.object({
-  minimumQty: z.number().int().nonnegative(),
-  maximumQty: z.number().int().positive(),
-  unitPrice: z.number().positive(),
+  pricingType: z.enum(['FIXED', 'UNIT']),
+  minCount: z.number().int().nonnegative(),
+  maxCount: z.number().int().positive(),
+  unitPrice: z.number().positive().optional().nullable(),
+  fixedAmount: z.number().positive().optional().nullable(),
+  currency: z.string().optional().default('INR'),
   effectiveFrom: z.string().datetime(),
   effectiveTo: z.string().datetime(),
+}).refine((data) => {
+  if (data.pricingType === 'FIXED') {
+    return data.fixedAmount !== undefined && data.fixedAmount !== null && (data.unitPrice === undefined || data.unitPrice === null);
+  } else {
+    return data.unitPrice !== undefined && data.unitPrice !== null && (data.fixedAmount === undefined || data.fixedAmount === null);
+  }
+}, {
+  message: "For FIXED pricing, fixedAmount is required and unitPrice must be null. For UNIT pricing, unitPrice is required and fixedAmount must be null.",
+  path: ["pricingType"]
 });
 
 export class ProductCreateDto {
@@ -39,14 +51,23 @@ export class ProductCreateDto {
 }
 
 export class PriceCreateDto {
+  @ApiProperty({ example: 'FIXED', enum: ['FIXED', 'UNIT'] })
+  pricingType!: 'FIXED' | 'UNIT';
+
   @ApiProperty({ example: 1 })
-  minimumQty!: number;
+  minCount!: number;
 
   @ApiProperty({ example: 100 })
-  maximumQty!: number;
+  maxCount!: number;
 
-  @ApiProperty({ example: 100.00 })
-  unitPrice!: number;
+  @ApiProperty({ example: null, required: false })
+  unitPrice?: number | null;
+
+  @ApiProperty({ example: 20000.00, required: false })
+  fixedAmount?: number | null;
+
+  @ApiProperty({ example: 'INR', default: 'INR' })
+  currency!: string;
 
   @ApiProperty({ example: '2026-01-01T00:00:00Z' })
   effectiveFrom!: string;
