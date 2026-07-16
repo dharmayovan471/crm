@@ -303,6 +303,7 @@ export class TenantService {
         CREATE TABLE IF NOT EXISTS "${schemaName}"."quotations" (
           "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           "quotation_no" varchar(50) UNIQUE NOT NULL,
+          "revision_no" varchar(50) DEFAULT 'R0' NOT NULL,
           "lead_id" uuid REFERENCES "${schemaName}"."leads"("id") ON DELETE SET NULL,
           "customer_id" uuid REFERENCES "${schemaName}"."customers"("id") ON DELETE SET NULL,
           "quote_date" timestamp DEFAULT now() NOT NULL,
@@ -312,6 +313,11 @@ export class TenantService {
           "tax_amount" decimal(12,2) DEFAULT 0.00 NOT NULL,
           "total_amount" decimal(12,2) NOT NULL,
           "status" varchar(50) DEFAULT 'DRAFT' NOT NULL,
+          "terms" text,
+          "notes" text,
+          "prepared_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL,
+          "approved_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL,
+          "signature" text,
           "created_at" timestamp DEFAULT now() NOT NULL
         );
       `));
@@ -357,6 +363,83 @@ export class TenantService {
         );
       `));
 
+      // Create companies table
+      await this.publicDb.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."companies" (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "company_code" varchar(50) UNIQUE NOT NULL,
+          "company_name" varchar(255) NOT NULL,
+          "email" varchar(255),
+          "phone" varchar(50),
+          "website" varchar(255),
+          "is_active" boolean DEFAULT true NOT NULL,
+          "created_at" timestamp DEFAULT now() NOT NULL,
+          "updated_at" timestamp DEFAULT now() NOT NULL,
+          "created_by" uuid,
+          "updated_by" uuid
+        );
+      `));
+
+      // Create lead_sources table
+      await this.publicDb.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."lead_sources" (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "code" varchar(50) UNIQUE NOT NULL,
+          "name" varchar(255) NOT NULL,
+          "is_active" boolean DEFAULT true NOT NULL,
+          "created_at" timestamp DEFAULT now() NOT NULL,
+          "updated_at" timestamp DEFAULT now() NOT NULL,
+          "created_by" uuid,
+          "updated_by" uuid
+        );
+      `));
+
+      // Create industries table
+      await this.publicDb.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."industries" (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "code" varchar(50) UNIQUE NOT NULL,
+          "name" varchar(255) NOT NULL,
+          "is_active" boolean DEFAULT true NOT NULL,
+          "created_at" timestamp DEFAULT now() NOT NULL,
+          "updated_at" timestamp DEFAULT now() NOT NULL,
+          "created_by" uuid,
+          "updated_by" uuid
+        );
+      `));
+
+      // Create quotation_revisions table
+      await this.publicDb.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."quotation_revisions" (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "quotation_id" uuid REFERENCES "${schemaName}"."quotations"("id") ON DELETE CASCADE NOT NULL,
+          "revision_no" varchar(50) NOT NULL,
+          "subtotal" decimal(12,2) NOT NULL,
+          "discount" decimal(12,2) DEFAULT 0.00 NOT NULL,
+          "tax_amount" decimal(12,2) DEFAULT 0.00 NOT NULL,
+          "total_amount" decimal(12,2) NOT NULL,
+          "status" varchar(50) NOT NULL,
+          "terms" text,
+          "notes" text,
+          "items_snapshot" text NOT NULL,
+          "created_at" timestamp DEFAULT now() NOT NULL,
+          "created_by" uuid
+        );
+      `));
+
+      // Create quotation_history table
+      await this.publicDb.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS "${schemaName}"."quotation_history" (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "quotation_id" uuid REFERENCES "${schemaName}"."quotations"("id") ON DELETE CASCADE NOT NULL,
+          "revision_no" varchar(50) NOT NULL,
+          "status" varchar(50) NOT NULL,
+          "remarks" text,
+          "created_at" timestamp DEFAULT now() NOT NULL,
+          "created_by" uuid
+        );
+      `));
+
       // Seed default lead statuses
       const defaultStatuses = [
         { code: 'NEW', name: 'New', order: 1, isWon: false, isDrop: false },
@@ -385,6 +468,97 @@ export class TenantService {
         VALUES ('LD', 1)
         ON CONFLICT DO NOTHING;
       `));
+
+      // Seed default Lead Sources
+      const defaultSources = [
+        { code: 'website', name: 'Website' },
+        { code: 'facebook', name: 'Facebook' },
+        { code: 'instagram', name: 'Instagram' },
+        { code: 'referral', name: 'Referral' },
+        { code: 'cold-call', name: 'Cold Call' },
+        { code: 'whatsapp', name: 'WhatsApp' },
+        { code: 'campaign', name: 'Campaign' },
+        { code: 'exhibition', name: 'Exhibition' },
+      ];
+      for (const s of defaultSources) {
+        await this.publicDb.execute(sql.raw(`
+          INSERT INTO "${schemaName}"."lead_sources" (code, name)
+          VALUES ('${s.code}', '${s.name}')
+          ON CONFLICT ("code") DO NOTHING;
+        `));
+      }
+
+      // Seed default Industries
+      const defaultIndustries = [
+        { code: 'school', name: 'School' },
+        { code: 'college', name: 'College' },
+        { code: 'university', name: 'University' },
+        { code: 'hospital', name: 'Hospital' },
+        { code: 'manufacturing', name: 'Manufacturing' },
+        { code: 'retail', name: 'Retail' },
+        { code: 'software', name: 'Software' },
+        { code: 'finance', name: 'Finance' },
+      ];
+      for (const ind of defaultIndustries) {
+        await this.publicDb.execute(sql.raw(`
+          INSERT INTO "${schemaName}"."industries" (code, name)
+          VALUES ('${ind.code}', '${ind.name}')
+          ON CONFLICT ("code") DO NOTHING;
+        `));
+      }
+
+      // Seed default Products and Pricing Slabs
+      const defaultProducts = [
+        { code: 'school-erp', name: 'School ERP', category: 'ERP', desc: 'School Management System' },
+        { code: 'college-erp', name: 'College ERP', category: 'ERP', desc: 'College Management System' },
+        { code: 'hrms', name: 'HRMS', category: 'HR', desc: 'Human Resource Management System' },
+        { code: 'crm', name: 'CRM', category: 'CRM', desc: 'Customer Relationship Management' },
+        { code: 'lms', name: 'LMS', category: 'LMS', desc: 'Learning Management System' },
+        { code: 'hostel', name: 'Hostel', category: 'Addon', desc: 'Hostel Management' },
+        { code: 'transport', name: 'Transport', category: 'Addon', desc: 'Transport Management' }
+      ];
+      for (const p of defaultProducts) {
+        const result = await this.publicDb.execute(sql.raw(`
+          INSERT INTO "${schemaName}"."products" (product_code, product_name, category, description)
+          VALUES ('${p.code}', '${p.name}', '${p.category}', '${p.desc}')
+          RETURNING id;
+        `));
+        const productId = result.rows[0].id;
+        
+        const now = new Date().toISOString();
+        const future = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
+        if (p.code === 'school-erp') {
+          const slabs = [
+            { min: 1, max: 1000, price: 20000 },
+            { min: 1001, max: 2000, price: 35000 },
+            { min: 2001, max: 4000, price: 55000 },
+            { min: 4001, max: 6000, price: 80000 }
+          ];
+          for (const slab of slabs) {
+            await this.publicDb.execute(sql.raw(`
+              INSERT INTO "${schemaName}"."product_prices" (product_id, minimum_qty, maximum_qty, unit_price, effective_from, effective_to)
+              VALUES ('${productId}', ${slab.min}, ${slab.max}, ${slab.price}, '${now}', '${future}');
+            `));
+          }
+        } else if (p.code === 'college-erp') {
+          const slabs = [
+            { min: 1, max: 2000, price: 40000 },
+            { min: 2001, max: 5000, price: 70000 },
+            { min: 5001, max: 999999, price: 100000 }
+          ];
+          for (const slab of slabs) {
+            await this.publicDb.execute(sql.raw(`
+              INSERT INTO "${schemaName}"."product_prices" (product_id, minimum_qty, maximum_qty, unit_price, effective_from, effective_to)
+              VALUES ('${productId}', ${slab.min}, ${slab.max}, ${slab.price}, '${now}', '${future}');
+            `));
+          }
+        } else {
+          await this.publicDb.execute(sql.raw(`
+            INSERT INTO "${schemaName}"."product_prices" (product_id, minimum_qty, maximum_qty, unit_price, effective_from, effective_to)
+            VALUES ('${productId}', 1, 999999, 15000, '${now}', '${future}');
+          `));
+        }
+      }
 
       // 5. Seed default permissions
       const defaultPermissions = [

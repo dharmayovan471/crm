@@ -25,4 +25,8 @@ export class ProductService {
   async getProductPrices(productId: string) {
     return this.productRepository.findPricesOfProduct(productId);
   }
+
+  async getPriceForQty(productId: string, qty: number): Promise<number> {
+    return this.productRepository.getPriceForQty(productId, qty);
+  }
 }

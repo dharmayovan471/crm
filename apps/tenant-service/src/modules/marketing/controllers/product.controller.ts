@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { ProductService } from '../services/product.service';
 import { ProductCreateDto, PriceCreateDto, ProductCreateSchema, PriceCreateSchema } from '../dto/product.dto';
@@ -48,5 +48,17 @@ export class ProductController {
   @ApiResponse({ status: 200, description: MESSAGES.PRICE_RETRIEVE_SUCCESS })
   async getProductPrices(@Param('id') productId: string) {
     return this.productService.getProductPrices(productId);
+  }
+
+  @Get(':id/price')
+  @Permissions('lead:view')
+  @ApiOperation({ summary: 'Get price of a product for a specific estimated count/quantity based on pricing slabs' })
+  async getPriceForQty(
+    @Param('id') productId: string,
+    @Query('quantity') quantity: string,
+  ) {
+    const qty = parseInt(quantity || '0', 10);
+    const price = await this.productService.getPriceForQty(productId, qty);
+    return { unitPrice: price, quantity: qty, amount: price * qty };
   }
 }

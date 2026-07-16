@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import { TenantContext } from '../../common/context/tenant.context';
-import { leads, leadProducts, leadStatuses, leadNumberSettings, users, activities } from '../../database/schemas/tenant.schema';
+import { leads, leadProducts, leadStatuses, leadNumberSettings, users, activities, productPrices } from '../../database/schemas/tenant.schema';
 
 @Injectable()
 export class LeadRepository {
@@ -24,26 +24,46 @@ export class LeadRepository {
         .where(eq(leadNumberSettings.id, settings[0].id));
     }
 
-    // 2. Resolve Financial Year (FY)
-    // Indian FY runs April 1 to March 31.
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth(); // 0-indexed: Jan=0, Apr=3
     
-    let fyStart = currentYear;
-    let fyEnd = currentYear + 1;
+    // 3. Zero pad sequence to 6 digits (e.g. 000001)
+    const seqString = sequence.toString().padStart(6, '0');
 
-    if (currentMonth < 3) {
-      fyStart = currentYear - 1;
-      fyEnd = currentYear;
+    return `${prefix}-${currentYear}-${seqString}`;
+  }
+
+  async resolveLeadExpectedValue(productsData?: any[]): Promise<{ expectedValue: number; resolvedProducts: any[] }> {
+    const db = TenantContext.getDb();
+    if (!productsData || productsData.length === 0) {
+      return { expectedValue: 0, resolvedProducts: [] };
     }
-
-    const fyString = `${fyStart.toString().slice(-2)}-${fyEnd.toString().slice(-2)}`;
-
-    // 3. Zero pad sequence (e.g. 0001)
-    const seqString = sequence.toString().padStart(4, '0');
-
-    return `${prefix}/${fyString}/${seqString}`;
+    
+    let expectedValue = 0;
+    const resolvedProducts = [];
+    
+    for (const p of productsData) {
+      const prices = await db
+        .select()
+        .from(productPrices)
+        .where(eq(productPrices.productId, p.productId));
+        
+      const matchingSlab = prices.find(
+        (sp) => p.quantity >= sp.minimumQty && p.quantity <= sp.maximumQty
+      );
+      
+      const unitPrice = matchingSlab ? parseFloat(matchingSlab.unitPrice) : (p.unitPrice || 0);
+      const amount = p.quantity * unitPrice;
+      expectedValue += amount;
+      
+      resolvedProducts.push({
+        ...p,
+        unitPrice,
+        amount
+      });
+    }
+    
+    return { expectedValue, resolvedProducts };
   }
 
   async create(leadData: any, productsData?: any[]) {
@@ -52,21 +72,25 @@ export class LeadRepository {
     // Auto-generate lead number
     const leadNo = await this.getNextLeadNumber();
 
+    // Resolve automatic price calculations
+    const { expectedValue, resolvedProducts } = await this.resolveLeadExpectedValue(productsData);
+
     const insertData = {
       ...leadData,
       leadNo,
+      expectedValue: expectedValue.toString(),
     };
 
     const result = await db.insert(leads).values(insertData).returning();
     const newLead = result[0];
 
-    if (productsData && productsData.length > 0) {
-      const pValues = productsData.map((p) => ({
+    if (resolvedProducts.length > 0) {
+      const pValues = resolvedProducts.map((p) => ({
         leadId: newLead.id,
         productId: p.productId,
         quantity: p.quantity,
         unitPrice: p.unitPrice.toString(),
-        amount: (p.quantity * p.unitPrice).toString(),
+        amount: p.amount.toString(),
       }));
       await db.insert(leadProducts).values(pValues);
     }
@@ -158,26 +182,31 @@ export class LeadRepository {
     // Verify lead exists
     await this.findById(id);
 
-    if (Object.keys(leadData).length > 0) {
-      await db
-        .update(leads)
-        .set({ ...leadData, updatedAt: new Date() })
-        .where(eq(leads.id, id));
-    }
+    let updatedLeadData = { ...leadData };
 
     if (productsData) {
+      const { expectedValue, resolvedProducts } = await this.resolveLeadExpectedValue(productsData);
+      updatedLeadData.expectedValue = expectedValue.toString();
+
       // Re-link lead products
       await db.delete(leadProducts).where(eq(leadProducts.leadId, id));
-      if (productsData.length > 0) {
-        const pValues = productsData.map((p) => ({
+      if (resolvedProducts.length > 0) {
+        const pValues = resolvedProducts.map((p) => ({
           leadId: id,
           productId: p.productId,
           quantity: p.quantity,
           unitPrice: p.unitPrice.toString(),
-          amount: (p.quantity * p.unitPrice).toString(),
+          amount: p.amount.toString(),
         }));
         await db.insert(leadProducts).values(pValues);
       }
+    }
+
+    if (Object.keys(updatedLeadData).length > 0) {
+      await db
+        .update(leads)
+        .set({ ...updatedLeadData, updatedAt: new Date() })
+        .where(eq(leads.id, id));
     }
 
     return this.findById(id);

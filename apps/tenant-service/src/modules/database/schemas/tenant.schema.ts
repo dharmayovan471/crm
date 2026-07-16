@@ -240,6 +240,7 @@ export const productPrices = pgTable('product_prices', {
 export const quotations = pgTable('quotations', {
   id: uuid('id').primaryKey().defaultRandom(),
   quotationNo: varchar('quotation_no', { length: 50 }).notNull().unique(),
+  revisionNo: varchar('revision_no', { length: 50 }).default('R0').notNull(),
   leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
   customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   quoteDate: timestamp('quote_date').defaultNow().notNull(),
@@ -249,6 +250,11 @@ export const quotations = pgTable('quotations', {
   taxAmount: decimal('tax_amount', { precision: 12, scale: 2 }).default('0.00').notNull(),
   totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
   status: varchar('status', { length: 50 }).default('DRAFT').notNull(),
+  terms: text('terms'),
+  notes: text('notes'),
+  preparedBy: uuid('prepared_by').references(() => users.id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+  signature: text('signature'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -285,5 +291,67 @@ export const attachments = pgTable('attachments', {
   contentType: varchar('content_type', { length: 100 }),
   uploadedBy: uuid('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+});
+
+export const companies = pgTable('companies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  companyCode: varchar('company_code', { length: 50 }).notNull().unique(),
+  companyName: varchar('company_name', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }),
+  phone: varchar('phone', { length: 50 }),
+  website: varchar('website', { length: 255 }),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdBy: uuid('created_by'),
+  updatedBy: uuid('updated_by'),
+});
+
+export const leadSources = pgTable('lead_sources', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdBy: uuid('created_by'),
+  updatedBy: uuid('updated_by'),
+});
+
+export const industries = pgTable('industries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdBy: uuid('created_by'),
+  updatedBy: uuid('updated_by'),
+});
+
+export const quotationRevisions = pgTable('quotation_revisions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  quotationId: uuid('quotation_id').references(() => quotations.id, { onDelete: 'cascade' }).notNull(),
+  revisionNo: varchar('revision_no', { length: 50 }).notNull(),
+  subtotal: decimal('subtotal', { precision: 12, scale: 2 }).notNull(),
+  discount: decimal('discount', { precision: 12, scale: 2 }).default('0.00').notNull(),
+  taxAmount: decimal('tax_amount', { precision: 12, scale: 2 }).default('0.00').notNull(),
+  totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
+  status: varchar('status', { length: 50 }).notNull(),
+  terms: text('terms'),
+  notes: text('notes'),
+  itemsSnapshot: text('items_snapshot').notNull(), // JSON snapshot string of line items
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdBy: uuid('created_by'),
+});
+
+export const quotationHistory = pgTable('quotation_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  quotationId: uuid('quotation_id').references(() => quotations.id, { onDelete: 'cascade' }).notNull(),
+  revisionNo: varchar('revision_no', { length: 50 }).notNull(),
+  status: varchar('status', { length: 50 }).notNull(),
+  remarks: text('remarks'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdBy: uuid('created_by'),
 });
 

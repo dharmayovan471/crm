@@ -51,4 +51,21 @@ export class ProductRepository {
       .from(productPrices)
       .where(eq(productPrices.productId, productId));
   }
+
+  async getPriceForQty(productId: string, qty: number): Promise<number> {
+    const db = TenantContext.getDb();
+    const prices = await db
+      .select()
+      .from(productPrices)
+      .where(eq(productPrices.productId, productId));
+    
+    const matchingSlab = prices.find(
+      (p) => qty >= p.minimumQty && qty <= p.maximumQty
+    );
+    
+    if (matchingSlab) {
+      return parseFloat(matchingSlab.unitPrice);
+    }
+    return 0;
+  }
 }
