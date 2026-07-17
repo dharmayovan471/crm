@@ -1,5 +1,5 @@
-import { Controller, Post, Get, Put, Body, Param, UseGuards, UseInterceptors, UploadedFile, Inject } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Post, Get, Put, Body, Param, UseGuards, UseInterceptors, UploadedFiles, Inject } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ActivityService } from '../services/activity.service';
 import { QuotationService } from '../services/quotation.service';
@@ -92,45 +92,57 @@ export class ActivityController {
   // ==========================================
 
   @Post('attachments/upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FilesInterceptor('files', 10))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        file: { type: 'string', format: 'binary' },
+        files: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
         entityType: { type: 'string', example: 'LEAD' },
         entityId: { type: 'string', example: 'd290f1d6-2e4b-4b2a-89a1-77884a29a001' },
       },
     },
   })
   @Permissions('lead:update')
-  @ApiOperation({ summary: 'Upload file attachment to S3 storage' })
+  @ApiOperation({ summary: 'Upload file attachments to S3 or local storage' })
   @ApiResponse({ status: 201, description: MESSAGES.ATTACHMENT_UPLOAD_SUCCESS })
-  async uploadAttachment(
-    @UploadedFile() file: Express.Multer.File,
+  async uploadAttachments(
+    @UploadedFiles() files: Express.Multer.File[],
     @Body('entityType') entityType: string,
     @Body('entityId') entityId: string,
     @CurrentUser('userId') userId: string,
   ) {
-    // 1. Upload to S3 (or local fallback)
-    const uploadRes = await this.s3Service.uploadFile(file, entityType, entityId);
+    if (!files || files.length === 0) {
+      return [];
+    }
 
-    // 2. Log metadata in Drizzle schema
     const db = TenantContext.getDb();
-    const result = await db
-      .insert(attachments)
-      .values({
-        entityType,
-        entityId,
-        fileName: uploadRes.fileName,
-        fileUrl: uploadRes.fileUrl,
-        fileSize: uploadRes.fileSize,
-        contentType: uploadRes.contentType,
-        uploadedBy: userId,
-      })
-      .returning();
+    const results = [];
 
-    return result[0];
+    for (const file of files) {
+      const uploadRes = await this.s3Service.uploadFile(file, entityType, entityId);
+      const insertResult = await db
+        .insert(attachments)
+        .values({
+          entityType,
+          entityId,
+          fileName: uploadRes.fileName,
+          fileUrl: uploadRes.fileUrl,
+          fileSize: uploadRes.fileSize,
+          contentType: uploadRes.contentType,
+          storageLocation: uploadRes.storageLocation,
+          localPath: uploadRes.localPath,
+          uploadFailed: uploadRes.uploadFailed,
+          uploadedBy: userId,
+        })
+        .returning();
+      results.push(insertResult[0]);
+    }
+
+    return results;
   }
 }

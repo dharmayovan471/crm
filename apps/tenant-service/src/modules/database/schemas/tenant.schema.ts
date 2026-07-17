@@ -169,6 +169,8 @@ export const leads = pgTable('leads', {
   regionId: uuid('region_id').references(() => regions.id, { onDelete: 'set null' }),
   expectedValue: decimal('expected_value', { precision: 12, scale: 2 }),
   expectedClosingDate: timestamp('expected_closing_date'),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -296,6 +298,9 @@ export const attachments = pgTable('attachments', {
   fileUrl: text('file_url').notNull(),
   fileSize: integer('file_size'),
   contentType: varchar('content_type', { length: 100 }),
+  storageLocation: varchar('storage_location', { length: 50 }).default('S3').notNull(),
+  localPath: text('local_path'),
+  uploadFailed: boolean('upload_failed').default(false).notNull(),
   uploadedBy: uuid('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
 });

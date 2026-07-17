@@ -7,6 +7,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MESSAGES } from '../../common/constants/messages.constants';
 
 @ApiTags('Lead Management')
@@ -20,8 +21,11 @@ export class LeadController {
   @Permissions('lead:create')
   @ApiOperation({ summary: 'Create a new lead' })
   @ApiResponse({ status: 201, description: MESSAGES.LEAD_CREATE_SUCCESS })
-  async create(@Body(new ZodValidationPipe(LeadCreateSchema)) dto: LeadCreateDto) {
-    return this.leadService.create(dto);
+  async create(
+    @Body(new ZodValidationPipe(LeadCreateSchema)) dto: LeadCreateDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.leadService.create(dto, userId);
   }
 
   @Get()
@@ -64,8 +68,9 @@ export class LeadController {
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(LeadUpdateSchema)) dto: LeadUpdateDto,
+    @CurrentUser('userId') userId: string,
   ) {
-    return this.leadService.update(id, dto);
+    return this.leadService.update(id, dto, userId);
   }
 
   @Delete(':id')

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { TenantContext } from '../../common/context/tenant.context';
-import { activities, leads, salesTeamMembers, users } from '../../database/schemas/tenant.schema';
+import { activities, leads, salesTeamMembers, users, attachments } from '../../database/schemas/tenant.schema';
 import { ActivityCreateDto } from '../dto/activity.dto';
 
 @Injectable()
@@ -31,7 +31,37 @@ export class ActivityService {
 
   async findAll() {
     const db = TenantContext.getDb();
-    return db.select().from(activities);
+    const list = await db.select().from(activities).orderBy(desc(activities.activityDate));
+    
+    const enriched = [];
+    for (const act of list) {
+      let creator = null;
+      if (act.createdBy) {
+        const userRes = await db
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, act.createdBy))
+          .limit(1);
+        creator = userRes[0] ? { name: userRes[0].email.split('@')[0], email: userRes[0].email } : null;
+      }
+
+      const actAttachments = await db
+        .select()
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.entityType, 'ACTIVITY'),
+            eq(attachments.entityId, act.id)
+          )
+        );
+
+      enriched.push({
+        ...act,
+        creator,
+        attachments: actAttachments,
+      });
+    }
+    return enriched;
   }
 
   private async dispatchSimulatedPushNotifications(leadId: string, activity: any, actorUserId: string) {

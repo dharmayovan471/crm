@@ -578,6 +578,19 @@ export class MigrationService implements OnModuleInit {
           ALTER TABLE "${schemaName}"."quotations" ADD COLUMN IF NOT EXISTS "signature" text;
         `));
 
+        // Alter leads table columns for audit fields
+        await this.publicDb.execute(sql.raw(`
+          ALTER TABLE "${schemaName}"."leads" ADD COLUMN IF NOT EXISTS "created_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL;
+          ALTER TABLE "${schemaName}"."leads" ADD COLUMN IF NOT EXISTS "updated_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL;
+        `));
+
+        // Alter attachments table columns for storage tracking and fallbacks
+        await this.publicDb.execute(sql.raw(`
+          ALTER TABLE "${schemaName}"."attachments" ADD COLUMN IF NOT EXISTS "storage_location" varchar(50) DEFAULT 'S3' NOT NULL;
+          ALTER TABLE "${schemaName}"."attachments" ADD COLUMN IF NOT EXISTS "local_path" text;
+          ALTER TABLE "${schemaName}"."attachments" ADD COLUMN IF NOT EXISTS "upload_failed" boolean DEFAULT false NOT NULL;
+        `));
+
         // Seeding default Lead Statuses
         const statusesCount = await this.publicDb.execute(sql.raw(`
           SELECT COUNT(*) FROM "${schemaName}"."lead_statuses";

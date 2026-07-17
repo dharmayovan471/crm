@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import { TenantContext } from '../../common/context/tenant.context';
-import { leads, leadProducts, leadStatuses, leadNumberSettings, users, activities, productPrices } from '../../database/schemas/tenant.schema';
+import { leads, leadProducts, leadStatuses, leadNumberSettings, users, activities, productPrices, products, attachments } from '../../database/schemas/tenant.schema';
 
 @Injectable()
 export class LeadRepository {
@@ -80,7 +80,7 @@ export class LeadRepository {
     return { expectedValue, resolvedProducts };
   }
 
-  async create(leadData: any, productsData?: any[]) {
+  async create(leadData: any, productsData?: any[], userId?: string) {
     const db = TenantContext.getDb();
     
     // Auto-generate lead number
@@ -93,6 +93,8 @@ export class LeadRepository {
       ...leadData,
       leadNo,
       expectedValue: expectedValue.toString(),
+      createdBy: userId,
+      assignedTo: leadData.assignedTo || userId, // default Lead Owner to the creator if not explicitly assigned
     };
 
     const result = await db.insert(leads).values(insertData).returning();
@@ -171,10 +173,35 @@ export class LeadRepository {
       throw new NotFoundException(`Lead with ID '${id}' not found`);
     }
 
-    const linkedProducts = await db
-      .select()
+    // Retrieve product details and pricing calculations
+    const linkedProductsRaw = await db
+      .select({
+        productId: leadProducts.productId,
+        quantity: leadProducts.quantity,
+        unitPrice: leadProducts.unitPrice,
+        amount: leadProducts.amount,
+        productName: products.productName,
+        productCode: products.productCode,
+        category: products.category,
+      })
       .from(leadProducts)
+      .leftJoin(products, eq(leadProducts.productId, products.id))
       .where(eq(leadProducts.leadId, id));
+
+    const resolvedProducts = [];
+    for (const lp of linkedProductsRaw) {
+      const prices = await db
+        .select()
+        .from(productPrices)
+        .where(eq(productPrices.productId, lp.productId));
+      const slab = prices.find((sp) => lp.quantity >= sp.minCount && lp.quantity <= sp.maxCount);
+      resolvedProducts.push({
+        ...lp,
+        pricingType: slab ? slab.pricingType : 'UNIT',
+        fixedAmount: slab ? slab.fixedAmount : null,
+        slabUnitPrice: slab ? slab.unitPrice : null,
+      });
+    }
 
     const linkedActivities = await db
       .select()
@@ -182,21 +209,53 @@ export class LeadRepository {
       .where(eq(activities.leadId, id))
       .orderBy(desc(activities.activityDate));
 
+    const enrichedActivities = [];
+    for (const act of linkedActivities) {
+      let creator = null;
+      if (act.createdBy) {
+        const userRes = await db
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, act.createdBy))
+          .limit(1);
+        creator = userRes[0] ? { name: userRes[0].email.split('@')[0], email: userRes[0].email } : null;
+      }
+
+      const actAttachments = await db
+        .select()
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.entityType, 'ACTIVITY'),
+            eq(attachments.entityId, act.id)
+          )
+        );
+
+      enrichedActivities.push({
+        ...act,
+        creator,
+        attachments: actAttachments,
+      });
+    }
+
     return {
       ...leadInfo.lead,
       status: leadInfo.status,
-      products: linkedProducts,
-      activities: linkedActivities,
+      products: resolvedProducts,
+      activities: enrichedActivities,
     };
   }
 
-  async update(id: string, leadData: any, productsData?: any[]) {
+  async update(id: string, leadData: any, productsData?: any[], userId?: string) {
     const db = TenantContext.getDb();
     
     // Verify lead exists
     await this.findById(id);
 
-    let updatedLeadData = { ...leadData };
+    let updatedLeadData = { 
+      ...leadData,
+      updatedBy: userId,
+    };
 
     if (productsData) {
       const { expectedValue, resolvedProducts } = await this.resolveLeadExpectedValue(productsData);

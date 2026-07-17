@@ -1,0 +1,36 @@
+{
+  "cli": {
+    "version": ">= 10.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:3000",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDE4v9IH_bfAzoraTPToTAZL1ygQclfw04"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://crm-tenant-service.onrender.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDE4v9IH_bfAzoraTPToTAZL1ygQclfw04"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

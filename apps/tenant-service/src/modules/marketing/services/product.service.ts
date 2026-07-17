@@ -63,4 +63,8 @@ export class ProductService {
       };
     }
   }
+
+  async searchProducts(keyword: string, page: number, pageSize: number) {
+    return this.productRepository.searchProducts(keyword, page, pageSize);
+  }
 }

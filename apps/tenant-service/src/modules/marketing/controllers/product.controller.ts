@@ -23,6 +23,19 @@ export class ProductController {
     return this.productService.createProduct(dto);
   }
 
+  @Get('search')
+  @Permissions('lead:view')
+  @ApiOperation({ summary: 'Search products with server-side pagination' })
+  async searchProducts(
+    @Query('keyword') keyword?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const pageNum = parseInt(page || '1', 10);
+    const sizeNum = parseInt(pageSize || '20', 10);
+    return this.productService.searchProducts(keyword || '', pageNum, sizeNum);
+  }
+
   @Get()
   @Permissions('lead:view')
   @ApiOperation({ summary: 'Get all products' })

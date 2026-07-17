@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { TenantContext } from '../../common/context/tenant.context';
 import { products, productPrices } from '../../database/schemas/tenant.schema';
 
@@ -85,5 +85,39 @@ export class ProductRepository {
       }
     }
     return 0;
+  }
+
+  async searchProducts(keyword: string, page: number, pageSize: number) {
+    const db = TenantContext.getDb();
+    const offset = (page - 1) * pageSize;
+    const searchPattern = `%${keyword}%`;
+
+    const whereClause = keyword
+      ? sql`(${products.productName} ILIKE ${searchPattern} OR 
+             ${products.productCode} ILIKE ${searchPattern} OR 
+             ${products.category} ILIKE ${searchPattern})`
+      : sql`true`;
+
+    const results = await db
+      .select()
+      .from(products)
+      .where(whereClause)
+      .limit(pageSize)
+      .offset(offset);
+
+    const countResult = await db
+      .select({ count: sql`count(*)` })
+      .from(products)
+      .where(whereClause);
+      
+    const totalCount = parseInt(countResult[0]?.count as string || '0', 10);
+
+    return {
+      results,
+      totalCount,
+      page,
+      pageSize,
+      totalPages: Math.ceil(totalCount / pageSize),
+    };
   }
 }

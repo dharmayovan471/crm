@@ -42,34 +42,61 @@ export class S3Service implements OnModuleInit {
     file: Express.Multer.File,
     entityType: string,
     entityId: string,
-  ): Promise<{ fileUrl: string; fileName: string; fileSize: number; contentType: string }> {
+  ): Promise<{ fileUrl: string; fileName: string; fileSize: number; contentType: string; storageLocation: string; localPath: string | null; uploadFailed: boolean }> {
     const fileExt = path.extname(file.originalname);
     const uniqueFileName = `${entityType.toLowerCase()}/${entityId}/${Date.now()}-${Math.round(Math.random() * 1e9)}${fileExt}`;
 
     if (!this.isFallbackMode && this.s3Client) {
-      // Upload to AWS S3
-      await this.s3Client.send(
-        new PutObjectCommand({
+      try {
+        // Upload to AWS S3
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: uniqueFileName,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          }),
+        );
+
+        // Generate a signed URL for retrieval (expires in 24 hours)
+        const command = new PutObjectCommand({
           Bucket: this.bucketName,
           Key: uniqueFileName,
-          Body: file.buffer,
-          ContentType: file.mimetype,
-        }),
-      );
+        });
+        const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 86400 });
 
-      // Generate a signed URL for retrieval (expires in 24 hours)
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: uniqueFileName,
-      });
-      const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 86400 });
+        return {
+          fileUrl: signedUrl,
+          fileName: file.originalname,
+          fileSize: file.size,
+          contentType: file.mimetype,
+          storageLocation: 'S3',
+          localPath: null,
+          uploadFailed: false,
+        };
+      } catch (err) {
+        console.warn('⚠️ AWS S3 upload failed at runtime. Saving file locally as a fallback.', err);
+        // Fallback to local storage on runtime S3 error
+        const destinationPath = path.join(this.localUploadDir, path.basename(uniqueFileName));
+        const parentDir = path.dirname(destinationPath);
+        if (!fs.existsSync(parentDir)) {
+          fs.mkdirSync(parentDir, { recursive: true });
+        }
 
-      return {
-        fileUrl: signedUrl,
-        fileName: file.originalname,
-        fileSize: file.size,
-        contentType: file.mimetype,
-      };
+        fs.writeFileSync(destinationPath, file.buffer);
+        const hostUrl = this.configService.get<string>('APP_URL', 'http://localhost:3000');
+        const fileUrl = `${hostUrl}/uploads/attachments/${path.basename(uniqueFileName)}`;
+
+        return {
+          fileUrl,
+          fileName: file.originalname,
+          fileSize: file.size,
+          contentType: file.mimetype,
+          storageLocation: 'LOCAL',
+          localPath: destinationPath,
+          uploadFailed: true,
+        };
+      }
     } else {
       // Local fallback storage
       const destinationPath = path.join(this.localUploadDir, path.basename(uniqueFileName));
@@ -87,6 +114,9 @@ export class S3Service implements OnModuleInit {
         fileName: file.originalname,
         fileSize: file.size,
         contentType: file.mimetype,
+        storageLocation: 'LOCAL',
+        localPath: destinationPath,
+        uploadFailed: false,
       };
     }
   }

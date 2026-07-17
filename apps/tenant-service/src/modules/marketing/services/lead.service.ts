@@ -6,9 +6,9 @@ import { LeadCreateDto, LeadUpdateDto } from '../dto/lead.dto';
 export class LeadService {
   constructor(private readonly leadRepository: LeadRepository) {}
 
-  async create(dto: LeadCreateDto) {
+  async create(dto: LeadCreateDto, userId: string) {
     const { products, ...leadData } = dto;
-    return this.leadRepository.create(leadData, products);
+    return this.leadRepository.create(leadData, products, userId);
   }
 
   async findAll(query?: string, statusId?: string) {
@@ -19,9 +19,9 @@ export class LeadService {
     return this.leadRepository.findById(id);
   }
 
-  async update(id: string, dto: LeadUpdateDto) {
+  async update(id: string, dto: LeadUpdateDto, userId: string) {
     const { products, ...leadData } = dto;
-    return this.leadRepository.update(id, leadData, products);
+    return this.leadRepository.update(id, leadData, products, userId);
   }
 
   async remove(id: string) {

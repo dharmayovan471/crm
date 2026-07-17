@@ -220,6 +220,8 @@ export class TenantService {
           "region_id" uuid REFERENCES "${schemaName}"."regions"("id") ON DELETE SET NULL,
           "expected_value" decimal(12,2),
           "expected_closing_date" timestamp,
+          "created_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL,
+          "updated_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL,
           "created_at" timestamp DEFAULT now() NOT NULL,
           "updated_at" timestamp DEFAULT now() NOT NULL
         );
@@ -365,6 +367,9 @@ export class TenantService {
           "file_url" text NOT NULL,
           "file_size" integer,
           "content_type" varchar(100),
+          "storage_location" varchar(50) DEFAULT 'S3' NOT NULL,
+          "local_path" text,
+          "upload_failed" boolean DEFAULT false NOT NULL,
           "uploaded_by" uuid REFERENCES "${schemaName}"."users"("id") ON DELETE SET NULL,
           "uploaded_at" timestamp DEFAULT now() NOT NULL
         );
